@@ -1,0 +1,70 @@
+app:
+  name: arbitragebot
+  env: development
+  log_level: info
+
+exchanges:
+  binance:
+    enabled: true
+    testnet: false
+    fee_taker: "0.0010"
+    rate_limit: 1200
+    websocket:
+      enabled: true
+      ping_interval: 20s
+      reconnect_delay: 5s
+  bybit:
+    enabled: true
+    testnet: false
+    fee_taker: "0.0010"
+    rate_limit: 600
+    websocket:
+      enabled: true
+      ping_interval: 20s
+      reconnect_delay: 5s
+
+orderbook:
+  max_depth: 20
+  max_age: 2s
+
+arbitrage:
+  detection_timeout: 10s
+  cross_exchange:
+    min_profit_threshold: "0.005"
+    opportunity_ttl: 10m
+
+execution:
+  timeout: 5s
+  retry:
+    max_attempts: 3
+    initial_delay: 100ms
+    max_delay: 1s
+    multiplier: 2.0
+
+risk:
+  max_position_per_exchange: "0.20"
+  daily_loss_limit: "0.05"
+  kill_switch_drawdown: "0.05"
+  max_open_orders: 10
+
+pairs:
+  - BTC/USDT
+  - ETH/USDT
+
+notification:
+  telegram:
+    enabled: true
+    notify_opportunities: true
+    notify_executions: true
+    notify_errors: true
+    notify_overview: true
+    overview_interval: 1h
+
+storage:
+  enabled: true
+  path: "opportunities.db"
+
+balance:
+  sync_interval: 30s
+  max_age: 60s
+  sync_after_trade: true
