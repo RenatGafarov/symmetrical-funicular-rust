@@ -3,8 +3,6 @@
 //! Uses serde_yaml to load YAML configuration files with support for
 //! environment variable overrides for sensitive credentials.
 
-#![allow(dead_code)]
-
 use serde::Deserialize;
 use std::{collections::HashMap, env, fs, time::Duration};
 use thiserror::Error;
