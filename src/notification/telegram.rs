@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use tracing::error;
 
 use crate::notification::{
     Event, EventType, NotificationError, Notifier, format_event,
@@ -119,7 +120,7 @@ impl TelegramNotifier {
                 )
                 .await
                 {
-                    eprintln!("Failed to send Telegram message: {}", e);
+                    error!(error = %e, "Failed to send Telegram message");
                 }
             }
 
@@ -207,7 +208,7 @@ impl Notifier for TelegramNotifier {
         }
 
         if let Err(e) = self.sender.try_send(event) {
-            eprintln!("Failed to queue Telegram message: {}", e);
+            error!(error = %e, "Failed to queue Telegram message");
         }
     }
 
