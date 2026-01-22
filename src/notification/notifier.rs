@@ -445,9 +445,10 @@ fn parse_pair_base(pair: &str) -> &str {
     pair.split('/').next().unwrap_or(pair)
 }
 
-/// Преобразует пару в формат хэштега (например, "BTC/USDT" -> "BTC_USDT")
+/// Преобразует пару в формат хэштега (например, "BTC/USDT" -> "BTC\_USDT")
+/// Underscore escaped for Telegram Markdown compatibility
 fn format_pair_tag(pair: &str) -> String {
-    pair.replace('/', "_")
+    pair.replace('/', "\\_")
 }
 
 /// Форматирует длительность
