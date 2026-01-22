@@ -283,10 +283,14 @@ mod duration_serde {
 impl Config {
     /// Load configuration from a YAML file at the given path.
     ///
-    /// API keys are loaded from environment variables:
+    /// First loads environment variables from `.env` file (if exists),
+    /// then loads YAML config and credentials from environment variables:
     /// - `{EXCHANGE}_API_KEY`, `{EXCHANGE}_API_SECRET`
     /// - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_ERROR_CHAT_ID`
     pub fn load(path: &str) -> Result<Self, ConfigError> {
+        // Load .env file if it exists (ignore error if not found)
+        dotenvy::dotenv().ok();
+
         let content = fs::read_to_string(path)?;
         let mut config: Config = serde_yaml::from_str(&content)?;
 
@@ -334,6 +338,8 @@ impl Config {
             ));
         }
 
+        let is_production = self.app.env != "development";
+
         let mut enabled_exchanges = 0;
         for (name, exchange) in &self.exchanges {
             if exchange.enabled {
@@ -346,7 +352,10 @@ impl Config {
                     )));
                 }
 
-                if exchange.api_key.is_empty() || exchange.api_secret.is_empty() {
+                // Only require credentials in production/staging
+                if is_production
+                    && (exchange.api_key.is_empty() || exchange.api_secret.is_empty())
+                {
                     return Err(ConfigError::Validation(format!(
                         "exchange {}: API credentials not found (set {}_API_KEY and {}_API_SECRET env vars)",
                         name,

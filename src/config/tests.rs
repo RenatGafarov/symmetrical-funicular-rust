@@ -525,11 +525,11 @@ pairs:
 }
 
 #[test]
-fn test_validate_missing_credentials() {
+fn test_validate_missing_credentials_in_production() {
     let yaml = r#"
 app:
   name: test
-  env: dev
+  env: production
 
 exchanges:
   binance:
@@ -582,18 +582,14 @@ pairs:
 // ==================== File loading tests ====================
 
 #[test]
-fn test_load_from_file() {
+fn test_load_from_file_development() {
+    // In development mode, credentials are not required
     let yaml = minimal_valid_yaml();
 
     let mut file = NamedTempFile::new().unwrap();
     file.write_all(yaml.as_bytes()).unwrap();
 
-    // Set required env vars
-    unsafe {
-        env::set_var("TESTEX_API_KEY", "file_test_key");
-        env::set_var("TESTEX_API_SECRET", "file_test_secret");
-    }
-
+    // No env vars needed in development mode
     let cfg = Config::load(file.path().to_str().unwrap()).unwrap();
 
     assert_eq!(cfg.app.name, "testbot");
@@ -602,12 +598,47 @@ fn test_load_from_file() {
 
     let ex = cfg.exchanges.get("testex").unwrap();
     assert!(ex.enabled);
-    assert_eq!(ex.api_key, "file_test_key");
+    // Credentials are empty but that's OK in development
+    assert!(ex.api_key.is_empty());
+}
+
+#[test]
+fn test_load_from_file_production_with_credentials() {
+    // Use unique exchange name to avoid env var conflicts with parallel tests
+    let yaml = r#"
+app:
+  name: testbot
+  env: production
+
+exchanges:
+  prodex:
+    enabled: true
+    fee_taker: "0.001"
+
+pairs:
+  - BTC/USDT
+"#;
+
+    let mut file = NamedTempFile::new().unwrap();
+    file.write_all(yaml.as_bytes()).unwrap();
+
+    // Set required env vars for production
+    unsafe {
+        env::set_var("PRODEX_API_KEY", "prod_key");
+        env::set_var("PRODEX_API_SECRET", "prod_secret");
+    }
+
+    let cfg = Config::load(file.path().to_str().unwrap()).unwrap();
+
+    assert_eq!(cfg.app.env, "production");
+    let ex = cfg.exchanges.get("prodex").unwrap();
+    assert_eq!(ex.api_key, "prod_key");
+    assert_eq!(ex.api_secret, "prod_secret");
 
     // Cleanup
     unsafe {
-        env::remove_var("TESTEX_API_KEY");
-        env::remove_var("TESTEX_API_SECRET");
+        env::remove_var("PRODEX_API_KEY");
+        env::remove_var("PRODEX_API_SECRET");
     }
 }
 
@@ -619,4 +650,79 @@ fn test_load_file_not_found() {
         .unwrap_err()
         .to_string()
         .contains("failed to read config file"));
+}
+
+// ==================== Environment-specific validation tests ====================
+
+#[test]
+fn test_validate_skip_credentials_in_development() {
+    // In development mode, credentials are NOT required
+    let yaml = r#"
+app:
+  name: test
+  env: development
+
+exchanges:
+  binance:
+    enabled: true
+    fee_taker: "0.001"
+
+pairs:
+  - BTC/USDT
+"#;
+    let cfg = from_yaml(yaml).unwrap();
+
+    // Should pass without credentials in development
+    let result = cfg.validate();
+    assert!(result.is_ok(), "Expected validation to pass in development mode without credentials");
+}
+
+#[test]
+fn test_validate_require_credentials_in_staging() {
+    // In staging mode, credentials ARE required (same as production)
+    let yaml = r#"
+app:
+  name: test
+  env: staging
+
+exchanges:
+  binance:
+    enabled: true
+    fee_taker: "0.001"
+
+pairs:
+  - BTC/USDT
+"#;
+    let cfg = from_yaml(yaml).unwrap();
+
+    let result = cfg.validate();
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("API credentials not found"));
+}
+
+#[test]
+fn test_validate_pass_with_credentials_in_production() {
+    // In production mode with credentials, validation should pass
+    let yaml = r#"
+app:
+  name: test
+  env: production
+
+exchanges:
+  binance:
+    enabled: true
+    fee_taker: "0.001"
+
+pairs:
+  - BTC/USDT
+"#;
+    let mut cfg = from_yaml(yaml).unwrap();
+    cfg.exchanges.get_mut("binance").unwrap().api_key = "key".to_string();
+    cfg.exchanges.get_mut("binance").unwrap().api_secret = "secret".to_string();
+
+    let result = cfg.validate();
+    assert!(result.is_ok(), "Expected validation to pass in production with credentials");
 }

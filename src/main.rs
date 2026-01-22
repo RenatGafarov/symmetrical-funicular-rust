@@ -127,8 +127,22 @@ fn print_all_config(cfg: &Config) {
         println!("  [{}]", name);
         println!("    enabled: {}", ex.enabled);
         println!("    testnet: {}", ex.testnet);
-        println!("    api_key: {}", if ex.api_key.is_empty() { "<not set>" } else { "<set>" });
-        println!("    api_secret: {}", if ex.api_secret.is_empty() { "<not set>" } else { "<set>" });
+        println!(
+            "    api_key: {}",
+            if ex.api_key.is_empty() {
+                "<not set>"
+            } else {
+                "<set>"
+            }
+        );
+        println!(
+            "    api_secret: {}",
+            if ex.api_secret.is_empty() {
+                "<not set>"
+            } else {
+                "<set>"
+            }
+        );
         println!("    fee_taker: {:?}", ex.fee_taker);
         println!("    rate_limit: {:?}", ex.rate_limit);
         if let Some(ws) = &ex.websocket {
@@ -180,7 +194,10 @@ fn print_all_config(cfg: &Config) {
     // Risk
     if let Some(risk) = &cfg.risk {
         println!("\n[risk]");
-        println!("  max_position_per_exchange: {:?}", risk.max_position_per_exchange);
+        println!(
+            "  max_position_per_exchange: {:?}",
+            risk.max_position_per_exchange
+        );
         println!("  daily_loss_limit: {:?}", risk.daily_loss_limit);
         println!("  kill_switch_drawdown: {:?}", risk.kill_switch_drawdown);
         println!("  max_open_orders: {:?}", risk.max_open_orders);
@@ -192,9 +209,30 @@ fn print_all_config(cfg: &Config) {
         if let Some(tg) = &notif.telegram {
             println!("  [telegram]");
             println!("    enabled: {}", tg.enabled);
-            println!("    bot_token: {}", if tg.bot_token.is_empty() { "<not set>" } else { "<set>" });
-            println!("    chat_id: {}", if tg.chat_id.is_empty() { "<not set>" } else { "<set>" });
-            println!("    error_chat_id: {}", if tg.error_chat_id.is_empty() { "<not set>" } else { "<set>" });
+            println!(
+                "    bot_token: {}",
+                if tg.bot_token.is_empty() {
+                    "<not set>"
+                } else {
+                    "<set>"
+                }
+            );
+            println!(
+                "    chat_id: {}",
+                if tg.chat_id.is_empty() {
+                    "<not set>"
+                } else {
+                    "<set>"
+                }
+            );
+            println!(
+                "    error_chat_id: {}",
+                if tg.error_chat_id.is_empty() {
+                    "<not set>"
+                } else {
+                    "<set>"
+                }
+            );
             println!("    notify_opportunities: {}", tg.notify_opportunities);
             println!("    notify_executions: {}", tg.notify_executions);
             println!("    notify_errors: {}", tg.notify_errors);
