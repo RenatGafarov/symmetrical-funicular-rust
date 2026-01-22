@@ -477,3 +477,7 @@ fn add_thousand_separators(n: u64) -> String {
     }
     result.chars().rev().collect()
 }
+
+#[cfg(test)]
+#[path = "tests.rs"]
+mod tests;
