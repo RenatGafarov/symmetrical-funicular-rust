@@ -2,50 +2,51 @@
 
 use super::*;
 use std::io::Write;
+use std::time::Duration;
 use tempfile::NamedTempFile;
 
 // ==================== Duration parsing tests ====================
 
 #[test]
 fn test_parse_duration_seconds() {
-    let d = duration_serde::parse_duration("30s").unwrap();
+    let d = duration::parse_duration("30s").unwrap();
     assert_eq!(d, Duration::from_secs(30));
 }
 
 #[test]
 fn test_parse_duration_minutes() {
-    let d = duration_serde::parse_duration("5m").unwrap();
+    let d = duration::parse_duration("5m").unwrap();
     assert_eq!(d, Duration::from_secs(300));
 }
 
 #[test]
 fn test_parse_duration_hours() {
-    let d = duration_serde::parse_duration("2h").unwrap();
+    let d = duration::parse_duration("2h").unwrap();
     assert_eq!(d, Duration::from_secs(7200));
 }
 
 #[test]
 fn test_parse_duration_milliseconds() {
-    let d = duration_serde::parse_duration("100ms").unwrap();
+    let d = duration::parse_duration("100ms").unwrap();
     assert_eq!(d, Duration::from_millis(100));
 }
 
 #[test]
 fn test_parse_duration_empty() {
-    let d = duration_serde::parse_duration("").unwrap();
+    let d = duration::parse_duration("").unwrap();
     assert_eq!(d, Duration::ZERO);
 }
 
 #[test]
 fn test_parse_duration_invalid_unit() {
-    let result = duration_serde::parse_duration("10x");
+    let result = duration::parse_duration("10x");
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("unknown duration unit"));
 }
 
 #[test]
 fn test_parse_duration_fractional() {
-    let d = duration_serde::parse_duration("1.5s").unwrap();
+    let d = duration::parse_duration("1.5s").unwrap();
     assert_eq!(d, Duration::from_millis(1500));
 }
 
