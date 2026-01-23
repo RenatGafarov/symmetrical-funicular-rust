@@ -2,11 +2,9 @@
 //!
 //! Coordinates all components: exchanges, detector, executor, risk manager, and notifications.
 
-mod config;
 mod error;
 mod stats;
 
-pub use config::BotConfig;
 pub use error::BotError;
 pub use stats::Stats;
 
@@ -18,14 +16,17 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 
 use crate::config::Config;
+use crate::domain::Opportunity;
 use crate::notification::{
     Event, Notifier, OverviewData, ShutdownData, StartupData, TelegramConfig, TelegramNotifier,
 };
+use crate::storage::{OpportunityStorage, SqliteStorage, SqliteStorageConfig};
 
 /// Main arbitrage bot that coordinates all components.
 pub struct Bot {
     cfg: Config,
     notifier: Option<Arc<TelegramNotifier>>,
+    storage: Option<Arc<SqliteStorage>>,
 
     // Timeouts
     detection_timeout: Duration,
@@ -43,11 +44,14 @@ pub struct Bot {
 }
 
 impl Bot {
-    /// Creates a new Bot instance.
-    pub fn new(cfg: BotConfig) -> Result<Self, BotError> {
+    /// Creates a new Bot instance from config file path.
+    pub async fn from_config_path(config_path: &str) -> Result<Self, BotError> {
+        let cfg = Config::load(config_path)?;
+
+        let dry_run = cfg.app.env == "development";
+
         // Set detection timeout from config or use default
         let detection_timeout = cfg
-            .app_config
             .arbitrage
             .as_ref()
             .and_then(|a| {
@@ -60,12 +64,13 @@ impl Bot {
             .unwrap_or(Duration::from_secs(10));
 
         let mut bot = Bot {
-            cfg: cfg.app_config.clone(),
+            cfg: cfg.clone(),
             notifier: None,
+            storage: None,
             detection_timeout,
-            version: cfg.version,
-            build_time: cfg.build_time,
-            dry_run: cfg.dry_run,
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            build_time: "".to_string(),
+            dry_run,
             started_at: Mutex::new(None),
             running: Mutex::new(false),
             stats: Mutex::new(Stats::default()),
@@ -73,7 +78,7 @@ impl Bot {
         };
 
         // Create notifier if configured
-        if let Some(ref notification) = cfg.app_config.notification {
+        if let Some(ref notification) = cfg.notification {
             if let Some(ref telegram) = notification.telegram {
                 if telegram.enabled
                     && !telegram.bot_token.is_empty()
@@ -95,7 +100,42 @@ impl Bot {
             }
         }
 
+        // Create storage if configured
+        if let Some(ref storage_cfg) = cfg.storage {
+            debug!(enabled = storage_cfg.enabled, "Storage configuration found");
+            if storage_cfg.enabled {
+                let path = storage_cfg
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| "opportunities.db".to_string());
+
+                debug!(path = %path, "Initializing storage");
+
+                let config = SqliteStorageConfig {
+                    path: path.clone(),
+                    max_connections: 5,
+                };
+
+                match SqliteStorage::new(config).await {
+                    Ok(storage) => {
+                        bot.storage = Some(Arc::new(storage));
+                        info!(path = %path, "Storage initialized");
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Failed to create storage");
+                    }
+                }
+            }
+        } else {
+            debug!("No storage configuration found");
+        }
+
         Ok(bot)
+    }
+
+    /// Returns the log level from config.
+    pub fn log_level(&self) -> Option<&str> {
+        self.cfg.app.log_level.as_deref()
     }
 
     /// Starts the bot and begins arbitrage detection.
@@ -164,6 +204,15 @@ impl Bot {
             let _ = notifier.close().await;
         }
 
+        // Close storage
+        if let Some(ref storage) = self.storage {
+            if let Err(e) = storage.close().await {
+                warn!(error = %e, "Failed to close storage");
+            } else {
+                info!("Storage closed");
+            }
+        }
+
         info!(uptime = ?uptime, "Bot stopped");
 
         Ok(())
@@ -212,7 +261,7 @@ impl Bot {
             .filter(|d| d.as_secs() > 0)
             .unwrap_or(Duration::from_secs(3600));
 
-        let mut overview_interval_timer = tokio::time::interval(overview_interval);
+        let mut last_overview = Instant::now();
 
         info!(
             detection_interval = ?Duration::from_millis(500),
@@ -222,19 +271,18 @@ impl Bot {
         );
 
         loop {
-            tokio::select! {
-                _ = interval.tick() => {
-                    if !self.is_running().await {
-                        break;
-                    }
-                    self.detect_and_execute().await;
-                }
-                _ = overview_interval_timer.tick() => {
-                    if !self.is_running().await {
-                        break;
-                    }
-                    self.send_overview().await;
-                }
+            interval.tick().await;
+
+            if !self.is_running().await {
+                break;
+            }
+
+            self.detect_and_execute().await;
+
+            // Check if it's time for overview
+            if last_overview.elapsed() >= overview_interval {
+                self.send_overview().await;
+                last_overview = Instant::now();
             }
         }
 
@@ -280,6 +328,39 @@ impl Bot {
         pairs.remove(pair);
     }
 
+    /// Saves an opportunity to storage if storage is enabled.
+    /// Returns true if the opportunity was saved (new), false if it already exists or storage is disabled.
+    pub async fn save_opportunity(&self, opportunity: &Opportunity) -> bool {
+        if let Some(ref storage) = self.storage {
+            match storage.save(opportunity).await {
+                Ok(saved) => {
+                    if saved {
+                        debug!(
+                            id = %opportunity.id,
+                            pair = %opportunity.pair,
+                            "Opportunity saved to storage"
+                        );
+
+                        // Update stats
+                        let mut stats = self.stats.lock().await;
+                        stats.opportunities_detected += 1;
+                    }
+                    saved
+                }
+                Err(e) => {
+                    warn!(
+                        error = %e,
+                        id = %opportunity.id,
+                        "Failed to save opportunity to storage"
+                    );
+                    false
+                }
+            }
+        } else {
+            false
+        }
+    }
+
     /// Sends a notification event if notifier is configured.
     async fn send_notification(&self, event: Event) {
         if let Some(ref notifier) = self.notifier {
@@ -297,6 +378,12 @@ impl Bot {
     async fn send_overview(&self) {
         let stats = self.stats().await;
         let uptime = self.uptime().await;
+
+        info!(
+            uptime = ?uptime,
+            detection_cycles = stats.detection_cycles,
+            "Sending overview notification"
+        );
 
         self.send_notification(Event::overview(OverviewData {
             uptime,
