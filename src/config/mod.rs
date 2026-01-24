@@ -130,8 +130,7 @@ impl Config {
                 }
 
                 // Only require credentials in production/staging
-                if is_production
-                    && (exchange.api_key.is_empty() || exchange.api_secret.is_empty())
+                if is_production && (exchange.api_key.is_empty() || exchange.api_secret.is_empty())
                 {
                     return Err(ConfigError::Validation(format!(
                         "exchange {}: API credentials not found (set {}_API_KEY and {}_API_SECRET env vars)",

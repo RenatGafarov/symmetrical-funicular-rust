@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
+use chrono::{DateTime, Utc};
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
-use chrono::{DateTime, Utc};
 
 /// Тип события уведомления
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -335,7 +335,9 @@ pub fn format_execution(data: &ExecutionData) -> String {
             data.pair,
             data.buy_exchange,
             data.sell_exchange,
-            data.error_message.as_deref().unwrap_or("Неизвестная ошибка"),
+            data.error_message
+                .as_deref()
+                .unwrap_or("Неизвестная ошибка"),
             format_duration(data.execution_time),
             Utc::now().format("%H:%M:%S UTC")
         )
@@ -364,7 +366,11 @@ pub fn format_error(data: &ErrorData) -> String {
 
 /// Форматирует запуск бота
 pub fn format_startup(data: &StartupData) -> String {
-    let mode = if data.dry_run { "🧪 DRY RUN" } else { "🚀 LIVE" };
+    let mode = if data.dry_run {
+        "🧪 DRY RUN"
+    } else {
+        "🚀 LIVE"
+    };
 
     format!(
         "🤖 *Бот запущен*\n\n\
@@ -404,7 +410,11 @@ pub fn format_shutdown(data: &ShutdownData) -> String {
 
 /// Форматирует периодический обзор
 pub fn format_overview(data: &OverviewData) -> String {
-    let mode = if data.dry_run { "🧪 DRY RUN" } else { "🚀 LIVE" };
+    let mode = if data.dry_run {
+        "🧪 DRY RUN"
+    } else {
+        "🚀 LIVE"
+    };
 
     format!(
         "📊 *Обзор торговли* {}\n\n\

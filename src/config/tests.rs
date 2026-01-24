@@ -443,10 +443,12 @@ pairs:
 
     let result = cfg.validate();
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("app.name is required"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("app.name is required")
+    );
 }
 
 #[test]
@@ -469,10 +471,12 @@ pairs: []
 
     let result = cfg.validate();
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("at least one trading pair is required"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("at least one trading pair is required")
+    );
 }
 
 #[test]
@@ -493,10 +497,12 @@ pairs:
 
     let result = cfg.validate();
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("at least one exchange must be enabled"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("at least one exchange must be enabled")
+    );
 }
 
 #[test]
@@ -519,10 +525,12 @@ pairs:
 
     let result = cfg.validate();
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("fee_taker is required"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("fee_taker is required")
+    );
 }
 
 #[test]
@@ -544,10 +552,12 @@ pairs:
 
     let result = cfg.validate();
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("API credentials not found"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("API credentials not found")
+    );
 }
 
 #[test]
@@ -574,10 +584,12 @@ pairs:
 
     let result = cfg.validate();
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("max_open_orders must be positive"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("max_open_orders must be positive")
+    );
 }
 
 // ==================== File loading tests ====================
@@ -647,10 +659,12 @@ pairs:
 fn test_load_file_not_found() {
     let result = Config::load("nonexistent_config.yaml");
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("failed to read config file"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("failed to read config file")
+    );
 }
 
 // ==================== Environment-specific validation tests ====================
@@ -675,7 +689,10 @@ pairs:
 
     // Should pass without credentials in development
     let result = cfg.validate();
-    assert!(result.is_ok(), "Expected validation to pass in development mode without credentials");
+    assert!(
+        result.is_ok(),
+        "Expected validation to pass in development mode without credentials"
+    );
 }
 
 #[test]
@@ -698,10 +715,12 @@ pairs:
 
     let result = cfg.validate();
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("API credentials not found"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("API credentials not found")
+    );
 }
 
 #[test]
@@ -725,5 +744,8 @@ pairs:
     cfg.exchanges.get_mut("binance").unwrap().api_secret = "secret".to_string();
 
     let result = cfg.validate();
-    assert!(result.is_ok(), "Expected validation to pass in production with credentials");
+    assert!(
+        result.is_ok(),
+        "Expected validation to pass in production with credentials"
+    );
 }

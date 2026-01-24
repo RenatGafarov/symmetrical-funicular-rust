@@ -2,13 +2,11 @@
 
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use tokio::sync::mpsc;
 use tracing::error;
 
-use crate::notification::{
-    Event, EventType, NotificationError, Notifier, format_event,
-};
+use crate::notification::{Event, EventType, NotificationError, Notifier, format_event};
 
 const TELEGRAM_API_URL: &str = "https://api.telegram.org/bot";
 const DEFAULT_HTTP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -112,13 +110,8 @@ impl TelegramNotifier {
                 };
 
                 let text = format_event(&event);
-                if let Err(e) = Self::send_message_to_chat_static(
-                    &http_client,
-                    &api_url,
-                    chat_id,
-                    &text,
-                )
-                .await
+                if let Err(e) =
+                    Self::send_message_to_chat_static(&http_client, &api_url, chat_id, &text).await
                 {
                     error!(error = %e, "Failed to send Telegram message");
                 }
