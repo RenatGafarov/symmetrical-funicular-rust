@@ -9,6 +9,7 @@ pub use error::BotError;
 pub use stats::Stats;
 
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -111,10 +112,19 @@ impl Bot {
         if let Some(ref storage_cfg) = cfg.storage {
             debug!(enabled = storage_cfg.enabled, "Storage configuration found");
             if storage_cfg.enabled {
-                let path = storage_cfg
+                // Ensure data directory exists
+                let data_dir = Path::new("data");
+                if !data_dir.exists() {
+                    if let Err(e) = std::fs::create_dir_all(data_dir) {
+                        warn!(error = %e, "Failed to create data directory");
+                    }
+                }
+
+                let filename = storage_cfg
                     .path
                     .clone()
                     .unwrap_or_else(|| "opportunities.db".to_string());
+                let path = format!("data/{}", filename);
 
                 debug!(path = %path, "Initializing storage");
 
