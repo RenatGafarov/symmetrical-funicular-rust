@@ -17,6 +17,7 @@ use tracing::{debug, info, warn};
 
 use crate::config::Config;
 use crate::domain::Opportunity;
+use crate::exchanges::Manager;
 use crate::notification::{
     Event, Notifier, OverviewData, ShutdownData, StartupData, TelegramConfig, TelegramNotifier,
 };
@@ -25,6 +26,7 @@ use crate::storage::{OpportunityStorage, SqliteStorage, SqliteStorageConfig};
 /// Main arbitrage bot that coordinates all components.
 pub struct Bot {
     cfg: Config,
+    exchange_manager: Arc<Manager>,
     notifier: Option<Arc<TelegramNotifier>>,
     storage: Option<Arc<SqliteStorage>>,
 
@@ -63,8 +65,13 @@ impl Bot {
             })
             .unwrap_or(Duration::from_secs(10));
 
+        // Create exchange manager from config
+        let exchange_manager = Manager::from_config(&cfg).await?;
+        info!("Exchange manager initialized with {} exchanges", exchange_manager.list().await.len());
+
         let mut bot = Bot {
             cfg: cfg.clone(),
+            exchange_manager: Arc::new(exchange_manager),
             notifier: None,
             storage: None,
             detection_timeout,
