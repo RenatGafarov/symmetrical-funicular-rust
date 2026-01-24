@@ -1,13 +1,14 @@
 mod bot;
 mod config;
 mod domain;
+mod exchanges;
 mod notification;
 mod storage;
 
 use bot::Bot;
 use std::env;
-use tracing::{error, info, Level};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing::{Level, error, info};
+use tracing_subscriber::{EnvFilter, fmt};
 
 const DEFAULT_CONFIG_PATH: &str = "configs/config.yaml";
 
@@ -41,7 +42,6 @@ fn init_tracing(log_level: Option<&str>) {
         .with_line_number(false)
         .init();
 }
-
 
 #[tokio::main]
 async fn main() {
