@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
+use super::poloniex;
 
 /// Manager coordinates multiple exchange connections.
 pub struct Manager {

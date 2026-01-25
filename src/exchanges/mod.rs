@@ -1,6 +1,7 @@
 //! Exchange integration abstractions and implementations.
 
 mod manager;
+pub mod poloniex;
 
 use crate::domain::{Fees, Order, Orderbook, Trade};
 use async_trait::async_trait;
@@ -47,11 +48,11 @@ pub type Result<T> = std::result::Result<T, ExchangeError>;
 pub trait Exchange: Send + Sync {
     /// Connect establishes connection to the exchange API.
     /// It should initialize WebSocket connections and authenticate if required.
-    /// Returns error if connection fails or context is cancelled.
+    /// Returns error if a connection fails or context is canceled.
     async fn connect(&self) -> Result<()>;
 
     /// Disconnect closes all connections to the exchange.
-    /// It should gracefully shutdown WebSocket connections and cleanup resources.
+    /// It should gracefully shut down WebSocket connections and clean up resources.
     /// Safe to call multiple times.
     async fn disconnect(&self) -> Result<()>;
 
@@ -65,7 +66,7 @@ pub trait Exchange: Send + Sync {
 
     /// SubscribeOrderbook opens a real-time orderbook stream for the given pairs.
     /// Returns a channel that receives orderbook updates.
-    /// The channel is closed when context is cancelled or connection is lost.
+    /// The channel is closed when context is canceled or connection is lost.
     /// Caller should handle reconnection by calling this method again.
     async fn subscribe_orderbook(
         &self,
@@ -79,7 +80,7 @@ pub trait Exchange: Send + Sync {
     async fn place_order(&self, order: Order) -> Result<Trade>;
 
     /// CancelOrder cancels an open order by its ID.
-    /// Returns ErrOrderNotFound if the order doesn't exist or is already filled/cancelled.
+    /// Returns ErrOrderNotFound if the order doesn't exist or is already filled/canceled.
     async fn cancel_order(&self, order_id: &str) -> Result<()>;
 
     /// GetOrder retrieves the current state of an order by its ID.

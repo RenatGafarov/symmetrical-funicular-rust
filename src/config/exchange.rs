@@ -23,7 +23,7 @@ pub struct ExchangeConfig {
     /// Taker fee as a decimal string (e.g., "0.001" for 0.1%).
     pub fee_taker: Option<String>,
     /// Maximum API requests per minute.
-    pub rate_limit: Option<i32>,
+    pub rate_limit: Option<i64>,
     /// WebSocket connection settings.
     pub websocket: Option<WebSocketConfig>,
 }

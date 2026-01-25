@@ -1,7 +1,7 @@
 app:
   name: arbitragebot
   env: development
-  log_level: info
+  log_level: debug
 
 exchanges:
   binance:
@@ -18,6 +18,24 @@ exchanges:
     testnet: false
     fee_taker: "0.0010"
     rate_limit: 600
+    websocket:
+      enabled: true
+      ping_interval: 20s
+      reconnect_delay: 5s
+  poloniex:
+    enabled: true
+    testnet: false
+    fee_taker: "0.0014"
+    rate_limit: 200
+    websocket:
+      enabled: true
+      ping_interval: 20s
+      reconnect_delay: 5s
+  gate:
+    enabled: true
+    testnet: false
+    fee_taker: "0.001" # если на балансе есть 1 GT token то комиссия 0.09%, если нет то комиссия 0.1%
+    rate_limit: 300
     websocket:
       enabled: true
       ping_interval: 20s
