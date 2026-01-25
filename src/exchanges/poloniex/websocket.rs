@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, UNIX_EPOCH};
 
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
@@ -67,12 +67,6 @@ impl WebSocketConfig {
             reconnect_delay,
             on_reconnect_failed: None,
         }
-    }
-
-    /// Sets the reconnection failure callback.
-    fn with_on_reconnect_failed(mut self, callback: OnReconnectFailed) -> Self {
-        self.on_reconnect_failed = Some(callback);
-        self
     }
 }
 
@@ -207,7 +201,7 @@ impl WebSocketManager {
         // 1. Connect to WebSocket
         let stream = self.connect().await?;
 
-        // 2. Send subscription message
+        // 2. Send a subscription message
         self.send_subscribe_message().await?;
 
         // 3. Spawn ping loop

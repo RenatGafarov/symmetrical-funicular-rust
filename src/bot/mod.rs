@@ -47,7 +47,7 @@ pub struct Bot {
 }
 
 impl Bot {
-    /// Creates a new Bot instance from config file path.
+    /// Creates a new Bot instance from the config file path.
     pub async fn from_config_path(config_path: &str) -> Result<Self, BotError> {
         let cfg = Config::load(config_path)?;
 
@@ -66,7 +66,7 @@ impl Bot {
             })
             .unwrap_or(Duration::from_secs(10));
 
-        // Create exchange manager from config
+        // Create the exchange manager from config
         let exchange_manager = Manager::from_config(&cfg).await?;
         info!("Exchange manager initialized with {} exchanges", exchange_manager.list().await.len());
 
@@ -85,7 +85,7 @@ impl Bot {
             executing_pairs: RwLock::new(HashSet::new()),
         };
 
-        // Create notifier if configured
+        // Create the notifier if configured
         if let Some(ref notification) = cfg.notification {
             if let Some(ref telegram) = notification.telegram {
                 if telegram.enabled
@@ -150,11 +150,6 @@ impl Bot {
         Ok(bot)
     }
 
-    /// Returns the log level from config.
-    pub fn log_level(&self) -> Option<&str> {
-        self.cfg.app.log_level.as_deref()
-    }
-
     /// Starts the bot and begins arbitrage detection.
     pub async fn start(&self) -> Result<(), BotError> {
         {
@@ -190,7 +185,7 @@ impl Bot {
         }))
         .await;
 
-        // Start main loop
+        // Start the main loop
         self.run_main_loop().await
     }
 
@@ -378,7 +373,7 @@ impl Bot {
         }
     }
 
-    /// Sends a notification event if notifier is configured.
+    /// Sends a notification event if the notifier is configured.
     async fn send_notification(&self, event: Event) {
         if let Some(ref notifier) = self.notifier {
             if let Err(e) = notifier.send(&event).await {
