@@ -10,7 +10,7 @@ use config::Config;
 use exchanges::poloniex::{Client, ClientConfig, WebSocketManager, PoloniexExchange};
 use exchanges::Exchange;
 use std::env;
-use tracing::{Level, error, info};
+use tracing::{Level, debug, error, info};
 use tracing_subscriber::{EnvFilter, fmt};
 
 const DEFAULT_CONFIG_PATH: &str = "configs/config.yaml";
@@ -240,6 +240,8 @@ async fn test_poloniex_client() {
         client.rate_limit()
     );
 
+    info!("Balance testing");
+
     info!("Test completed");
 }
 
@@ -262,7 +264,20 @@ async fn test_poloniex_exchange() {
 
     match exchange.connect().await {
         Ok(_) => info!("Exchange connected"),
-        Err(e) => error!("Exchange connection failed: {}", e)
+        Err(e) => {
+            error!("Exchange connection failed: {}", e);
+            return;
+        }
+    }
+
+    match exchange.get_balances().await {
+        Ok(balances) => {
+            info!("Balances received: {} currencies", balances.len());
+            for (currency, amount) in &balances {
+                debug!(currency = %currency, amount = %amount, "balance");
+            }
+        }
+        Err(e) => error!("Failed to get balances: {}", e),
     }
 
     match exchange.disconnect().await {

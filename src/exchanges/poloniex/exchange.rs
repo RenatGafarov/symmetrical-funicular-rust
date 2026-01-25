@@ -1,10 +1,13 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use reqwest::Method;
 use rust_decimal::Decimal;
+use serde::Deserialize;
 use tokio::sync::{mpsc, Mutex};
 use tracing::{debug, info, warn};
 
@@ -111,7 +114,7 @@ impl Exchange for PoloniexExchange {
             return Err(ExchangeError::Connection("not connected".to_string()));
         }
 
-        // Create WebSocket manager
+        // Create a WebSocket manager
         let (manager, orderbook_rx) = WebSocketManager::new(&self.config, pairs);
         let manager = Arc::new(manager);
 
@@ -145,7 +148,35 @@ impl Exchange for PoloniexExchange {
     }
 
     async fn get_balances(&self) -> Result<HashMap<String, Decimal>> {
-        todo!()
+        if !self.is_connected() {
+            return Err(ExchangeError::Connection("not connected".to_string()));
+        }
+
+        let body = self
+            .client
+            .request(Method::GET, "/accounts/balances", None, true)
+            .await
+            .map_err(|e| ExchangeError::Api(format!("get balances: {}", e)))?;
+
+        let accounts: Vec<AccountBalance> = serde_json::from_slice(&body)
+            .map_err(|e| ExchangeError::Api(format!("parse balances: {}", e)))?;
+
+        let mut balances = HashMap::new();
+        for account in accounts {
+            if account.account_type != "SPOT" {
+                continue;
+            }
+            for bal in account.balances {
+                let available = Decimal::from_str(&bal.available).unwrap_or_default();
+                if available.is_sign_positive() && !available.is_zero() {
+                    balances.insert(bal.currency, available);
+                }
+            }
+        }
+
+        debug!(balances = ?balances, "fetched balances");
+
+        Ok(balances)
     }
 
     fn get_fees(&self, _pair: &str) -> Fees {
@@ -153,10 +184,32 @@ impl Exchange for PoloniexExchange {
     }
 
     fn name(&self) -> &str {
-        "poloniex"
+        EXCHANGE_NAME
     }
 
     fn supported_pairs(&self) -> Vec<String> {
-        todo!()
+        self.pairs.clone()
     }
+}
+
+/// Poloniex account balance response.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AccountBalance {
+    #[allow(dead_code)]
+    account_id: String,
+    account_type: String,
+    balances: Vec<Balance>,
+}
+
+/// Individual currency balance.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Balance {
+    #[allow(dead_code)]
+    currency_id: String,
+    currency: String,
+    available: String,
+    #[allow(dead_code)]
+    hold: String,
 }
