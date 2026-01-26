@@ -83,6 +83,7 @@ storage:
   path: "opportunities.db"
 
 balance:
+  enabled: true
   sync_interval: 30s
   max_age: 60s
   sync_after_trade: true
