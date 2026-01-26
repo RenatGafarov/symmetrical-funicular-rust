@@ -16,6 +16,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::config::ExchangeConfig;
 use crate::domain::{Orderbook, PriceLevel};
+use crate::exchanges::utils::{pair_to_symbol, symbol_to_pair};
 
 /// Poloniex WebSocket URL.
 const WEBSOCKET_URL: &str = "wss://ws.poloniex.com/ws/public";
@@ -367,16 +368,6 @@ fn normalize_depth(depth: u8) -> u8 {
     } else {
         20
     }
-}
-
-/// Converts "BTC/USDT" to "BTC_USDT".
-fn pair_to_symbol(pair: &str) -> String {
-    pair.replace('/', "_")
-}
-
-/// Converts "BTC_USDT" to "BTC/USDT".
-fn symbol_to_pair(symbol: &str) -> String {
-    symbol.replace('_', "/")
 }
 
 /// Poloniex orderbook WebSocket message.

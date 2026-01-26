@@ -2,6 +2,7 @@
 
 mod manager;
 pub mod poloniex;
+pub(crate) mod utils;
 
 use crate::domain::{Fees, Order, Orderbook, Trade};
 use async_trait::async_trait;

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use reqwest::Method;
@@ -12,8 +12,9 @@ use tokio::sync::{mpsc, Mutex};
 use tracing::{debug, info, warn};
 
 use crate::config::{Config, ExchangeConfig};
-use crate::domain::{Fees, Order, Orderbook, Trade};
+use crate::domain::{Fees, Order, OrderSide, Orderbook, Trade};
 use crate::exchanges::poloniex::{Client, WebSocketManager};
+use crate::exchanges::utils::{pair_to_symbol, parse_order_side, parse_order_status, parse_order_type, parse_price_levels, symbol_to_pair};
 use crate::exchanges::{Exchange, ExchangeError, Result};
 
 const EXCHANGE_NAME: &str = "poloniex";
@@ -25,6 +26,8 @@ const MAX_CLOCK_DRIFT: Duration = Duration::from_secs(5);
 pub struct PoloniexExchange {
     client: Client,
     config: ExchangeConfig,
+    fees: Fees,
+    orderbook_depth: i32,
     pairs: Vec<String>,
     connected: AtomicBool,
     websocket_manager: Mutex<Option<Arc<WebSocketManager>>>,
@@ -48,9 +51,26 @@ impl PoloniexExchange {
 
         let pairs = config.pairs.clone();
 
+        // Parse taker fee from config, default to 0
+        let taker_fee = exchange_config
+            .fee_taker
+            .as_ref()
+            .and_then(|s| Decimal::from_str(s).ok())
+            .unwrap_or_default();
+
+        let fees = Fees::new(taker_fee, taker_fee);
+
+        let orderbook_depth = config
+            .orderbook
+            .as_ref()
+            .and_then(|o| o.max_depth)
+            .unwrap_or(DEFAULT_ORDERBOOK_DEPTH);
+
         Ok(Self {
             client,
             config: exchange_config.clone(),
+            fees,
+            orderbook_depth,
             pairs,
             connected: AtomicBool::new(false),
             websocket_manager: Mutex::new(None),
@@ -102,8 +122,29 @@ impl Exchange for PoloniexExchange {
         self.connected.load(Ordering::SeqCst)
     }
 
-    async fn get_orderbook(&self, _pair: &str) -> Result<Orderbook> {
-        todo!()
+    async fn get_orderbook(&self, pair: &str) -> Result<Orderbook> {
+        if !self.is_connected() {
+            return Err(ExchangeError::Connection("not connected".to_string()));
+        }
+
+        let symbol = pair_to_symbol(pair);
+        let endpoint = format!("/markets/{}/orderBook", symbol);
+
+        let depth = self.orderbook_depth;
+
+        let mut params = HashMap::new();
+        params.insert("limit".to_string(), depth.to_string());
+
+        let body = self
+            .client
+            .request(Method::GET, &endpoint, Some(params), false)
+            .await
+            .map_err(|e| ExchangeError::Api(format!("get orderbook for {}: {}", pair, e)))?;
+
+        let resp: OrderbookResponse = serde_json::from_slice(&body)
+            .map_err(|e| ExchangeError::Api(format!("parse orderbook: {}", e)))?;
+
+        Ok(resp.to_orderbook(pair))
     }
 
     async fn subscribe_orderbook(
@@ -135,16 +176,87 @@ impl Exchange for PoloniexExchange {
         Ok(orderbook_rx)
     }
 
-    async fn place_order(&self, _order: Order) -> Result<Trade> {
-        todo!()
+    // TODO: мне не нравится концепция IOC, надо вернуться и покрутить логику ордеров
+    // https://docs.poloniex.com/#order-types
+    async fn place_order(&self, order: Order) -> Result<Trade> {
+        if !self.is_connected() {
+            return Err(ExchangeError::Connection("not connected".to_string()));
+        }
+
+        let symbol = pair_to_symbol(&order.pair);
+        let side = match order.side {
+            OrderSide::Buy => "BUY",
+            OrderSide::Sell => "SELL",
+        };
+
+        let mut params = HashMap::new();
+        params.insert("symbol".to_string(), symbol);
+        params.insert("side".to_string(), side.to_string());
+        params.insert("type".to_string(), "LIMIT".to_string());
+        params.insert("price".to_string(), order.price.to_string());
+        params.insert("quantity".to_string(), order.quantity.to_string());
+        params.insert("timeInForce".to_string(), "IOC".to_string()); // Immediate Or Cancel
+
+        let body = self
+            .client
+            .request(Method::POST, "/orders", Some(params), true)
+            .await
+            .map_err(|e| map_client_error(e, &order.pair))?;
+
+        let resp: PlaceOrderResponse = serde_json::from_slice(&body)
+            .map_err(|e| ExchangeError::Api(format!("parse order response: {}", e)))?;
+
+        let filled_qty = Decimal::from_str(&resp.filled_quantity).unwrap_or_default();
+        let avg_price = Decimal::from_str(&resp.avg_price)
+            .ok()
+            .filter(|p| !p.is_zero())
+            .unwrap_or(order.price);
+
+        Ok(Trade {
+            id: resp.id.clone(),
+            order_id: resp.id,
+            exchange: EXCHANGE_NAME.to_string(),
+            pair: order.pair,
+            side: order.side,
+            price: avg_price,
+            quantity: filled_qty,
+            fee: Decimal::ZERO,
+            fee_currency: String::new(),
+            timestamp: std::time::SystemTime::now(),
+        })
     }
 
     async fn cancel_order(&self, _order_id: &str) -> Result<()> {
-        todo!()
+        if !self.is_connected() {
+            return Err(ExchangeError::Connection("not connected".to_string()));
+        }
+
+        let endpoint = format!("/orders/{}", _order_id);
+
+        self.client
+            .request(Method::DELETE, &endpoint, None, true)
+            .await
+            .map_err(|e| ExchangeError::Api(format!("cancel order: {}", e)))?;
+
+        Ok(())
     }
 
-    async fn get_order(&self, _order_id: &str) -> Result<Order> {
-        todo!()
+    async fn get_order(&self, order_id: &str) -> Result<Order> {
+        if !self.is_connected() {
+            return Err(ExchangeError::Connection("not connected".to_string()));
+        }
+
+        let endpoint = format!("/orders/{}", order_id);
+        let body = self
+            .client
+            .request(Method::GET, &endpoint, None, true)
+            .await
+            .map_err(|e| ExchangeError::Api(format!("get order: {}", e)))?;
+
+        let order_info: OrderInfo = serde_json::from_slice(&body)
+            .map_err(|e| ExchangeError::Api(format!("parse order: {}", e)))?;
+
+        Ok(order_info.to_order())
     }
 
     async fn get_balances(&self) -> Result<HashMap<String, Decimal>> {
@@ -180,7 +292,7 @@ impl Exchange for PoloniexExchange {
     }
 
     fn get_fees(&self, _pair: &str) -> Fees {
-        todo!()
+        self.fees
     }
 
     fn name(&self) -> &str {
@@ -189,6 +301,49 @@ impl Exchange for PoloniexExchange {
 
     fn supported_pairs(&self) -> Vec<String> {
         self.pairs.clone()
+    }
+}
+
+/// Default orderbook depth.
+const DEFAULT_ORDERBOOK_DEPTH: i32 = 20;
+
+/// Poloniex orderbook response.
+#[derive(Debug, Deserialize)]
+struct OrderbookResponse {
+    time: i64,
+    #[allow(dead_code)]
+    scale: Option<String>,
+    asks: Vec<String>,
+    bids: Vec<String>,
+    ts: i64,
+}
+
+/// Poloniex place order response.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlaceOrderResponse {
+    id: String,
+    #[allow(dead_code)]
+    client_order_id: String,
+    #[allow(dead_code)]
+    state: String,
+    filled_quantity: String,
+    avg_price: String,
+}
+
+impl OrderbookResponse {
+    fn to_orderbook(&self, pair: &str) -> Orderbook {
+        let bids = parse_price_levels(&self.bids);
+        let asks = parse_price_levels(&self.asks);
+        let timestamp_ms = if self.ts != 0 { self.ts } else { self.time };
+
+        Orderbook {
+            exchange: EXCHANGE_NAME.to_string(),
+            pair: pair.to_string(),
+            bids,
+            asks,
+            timestamp: UNIX_EPOCH + Duration::from_millis(timestamp_ms as u64),
+        }
     }
 }
 
@@ -212,4 +367,66 @@ struct Balance {
     available: String,
     #[allow(dead_code)]
     hold: String,
+}
+
+/// Poloniex order info response.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OrderInfo {
+    id: String,
+    #[allow(dead_code)]
+    client_order_id: String,
+    symbol: String,
+    side: String,
+    #[serde(rename = "type")]
+    order_type: String,
+    price: String,
+    quantity: String,
+    #[allow(dead_code)]
+    amount: String,
+    state: String,
+    #[allow(dead_code)]
+    filled_amount: String,
+    #[allow(dead_code)]
+    filled_quantity: String,
+    create_time: i64,
+    update_time: i64,
+}
+
+impl OrderInfo {
+    fn to_order(&self) -> Order {
+        let price = Decimal::from_str(&self.price).unwrap_or_default();
+        let quantity = Decimal::from_str(&self.quantity).unwrap_or_default();
+
+        Order {
+            id: self.id.clone(),
+            exchange: EXCHANGE_NAME.to_string(),
+            pair: symbol_to_pair(&self.symbol),
+            side: parse_order_side(&self.side),
+            order_type: parse_order_type(&self.order_type),
+            price,
+            quantity,
+            status: parse_order_status(&self.state),
+            created_at: UNIX_EPOCH + Duration::from_millis(self.create_time as u64),
+            updated_at: UNIX_EPOCH + Duration::from_millis(self.update_time as u64),
+        }
+    }
+}
+
+/// Maps Poloniex client errors to exchange errors.
+fn map_client_error(err: crate::exchanges::poloniex::client::ClientError, pair: &str) -> ExchangeError {
+    use crate::exchanges::poloniex::client::ClientError;
+
+    match err {
+        ClientError::Api(api_err) => match api_err.code {
+            21603 => ExchangeError::InsufficientFunds,
+            21606 => ExchangeError::OrderNotFound(pair.to_string()),
+            21601 => ExchangeError::PairNotSupported(pair.to_string()),
+            _ => ExchangeError::Api(format!("poloniex error for {}: {}", pair, api_err)),
+        },
+        ClientError::RateLimitExceeded { .. } => {
+            ExchangeError::Api(format!("rate limit exceeded for {}", pair))
+        }
+        other => ExchangeError::Api(format!("{}", other)),
+    }
 }
